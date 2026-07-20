@@ -58,39 +58,50 @@ export async function POST(req: NextRequest) {
         continue; // silently skip — this repo opted out of scanning
       }
 
-      const { data: repoRow, error: repoError } = await supabaseServer
+      // NOTE: payload is wrapped in an array — passing a bare single object
+      // to .upsert()/.insert() can make TS resolve the wrong overload when
+      // the Insert type is an intersection (Partial<Repo> & {...}), which
+      // surfaces as a false "unknown property" error. Arrays always match
+      // the correct overload.
+      const { data: repoRows, error: repoError } = await supabaseServer
         .from("repos")
         .upsert(
-          {
-            full_name: repo.full_name,
-            html_url: repo.html_url,
-            description: repo.description,
-            stars: repo.stars,
-            language: repo.language,
-            pushed_at: repo.pushed_at,
-            is_fork: false,
-            is_archived: false,
-            has_restrictive_security_md: false,
-            security_contact: repo.security_contact ?? security.contact,
-            cached_at: new Date().toISOString(),
-          },
+          [
+            {
+              full_name: repo.full_name,
+              html_url: repo.html_url,
+              description: repo.description,
+              stars: repo.stars,
+              language: repo.language,
+              pushed_at: repo.pushed_at,
+              is_fork: false,
+              is_archived: false,
+              has_restrictive_security_md: false,
+              security_contact: repo.security_contact ?? security.contact,
+              cached_at: new Date().toISOString(),
+            },
+          ],
           { onConflict: "full_name" }
         )
-        .select("id, full_name")
-        .single();
+        .select("id, full_name");
 
       if (repoError) throw repoError;
+      const repoRow = repoRows?.[0];
+      if (!repoRow) throw new Error(`Upsert for ${repo.full_name} returned no row`);
 
-      const { data: jobRow, error: jobError } = await supabaseServer
+      const { data: jobRows, error: jobError } = await supabaseServer
         .from("scan_jobs")
-        .insert({
-          repo_id: repoRow.id,
-          status: "queued",
-        })
-        .select("id")
-        .single();
+        .insert([
+          {
+            repo_id: repoRow.id,
+            status: "queued",
+          },
+        ])
+        .select("id");
 
       if (jobError) throw jobError;
+      const jobRow = jobRows?.[0];
+      if (!jobRow) throw new Error(`Insert for scan_jobs (${repo.full_name}) returned no row`);
 
       jobIds.push({ full_name: repo.full_name, job_id: jobRow.id });
     }
