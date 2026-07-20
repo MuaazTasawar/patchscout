@@ -19,7 +19,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	webhookHandler := handlers.NewWebhookHandler(db, cfg.CloneDir, cfg.WorkerCallbackSecret)
+	webhookHandler := handlers.NewWebhookHandler(db, cfg.CloneDir, cfg.WorkerCallbackSecret, cfg.NextCallbackURL)
 	mux.Handle("/webhook/scan", webhookHandler)
 
 	// Phase 8 adds /healthz for Render's health check probe.
