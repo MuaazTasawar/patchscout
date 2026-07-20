@@ -1,0 +1,31 @@
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local
+web/.env*.local
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/.vercel
+
+# Go
+worker/patchscout-worker
+worker/*.exe
+worker/*.test
+worker/*.out
+worker/.env
+worker/tmp/
+worker/clones/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.log
+.env
