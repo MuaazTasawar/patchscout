@@ -1,5 +1,12 @@
 // Shared domain types + a minimal Supabase Database type.
 // Extend the Database type as new tables are added in later phases.
+//
+// NOTE ON Insert/Update SHAPES: these are intentionally hand-written field
+// by field (matching the style Supabase's own `supabase gen types` output
+// uses) rather than derived via `Partial<Row> & {...}`. Intersecting a full
+// Partial<T> with a required-subset type is non-standard and can cause
+// TS's structural inference to collapse to `never` deep inside
+// PostgrestFilterBuilder's generic chain instead of raising a clear error.
 
 export type RepoLanguage = "go" | "python" | "flutter" | "other";
 
@@ -35,6 +42,36 @@ export interface Repo {
   cached_at: string;
 }
 
+export interface RepoInsert {
+  id?: string;
+  full_name: string;
+  html_url: string;
+  description?: string | null;
+  stars?: number;
+  language?: string | null;
+  pushed_at?: string | null;
+  is_fork?: boolean;
+  is_archived?: boolean;
+  has_restrictive_security_md?: boolean;
+  security_contact?: string | null;
+  cached_at?: string;
+}
+
+export interface RepoUpdate {
+  id?: string;
+  full_name?: string;
+  html_url?: string;
+  description?: string | null;
+  stars?: number;
+  language?: string | null;
+  pushed_at?: string | null;
+  is_fork?: boolean;
+  is_archived?: boolean;
+  has_restrictive_security_md?: boolean;
+  security_contact?: string | null;
+  cached_at?: string;
+}
+
 export interface ScanJob {
   id: string;
   repo_id: string;
@@ -43,6 +80,26 @@ export interface ScanJob {
   created_at: string;
   updated_at: string;
   error: string | null;
+}
+
+export interface ScanJobInsert {
+  id?: string;
+  repo_id: string;
+  status?: ScanJobStatus;
+  requested_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  error?: string | null;
+}
+
+export interface ScanJobUpdate {
+  id?: string;
+  repo_id?: string;
+  status?: ScanJobStatus;
+  requested_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  error?: string | null;
 }
 
 export interface Finding {
@@ -66,40 +123,69 @@ export interface Finding {
   created_at: string;
 }
 
+export interface FindingInsert {
+  id?: string;
+  scan_job_id: string;
+  repo_id: string;
+  type: FindingType;
+  severity?: FindingSeverity;
+  status?: FindingStatus;
+  title: string;
+  description: string;
+  package_name?: string | null;
+  vulnerable_version?: string | null;
+  patched_version?: string | null;
+  file_path?: string | null;
+  line_number?: number | null;
+  draft_pr_branch?: string | null;
+  draft_pr_body?: string | null;
+  draft_issue_body?: string | null;
+  draft_email_body?: string | null;
+  created_at?: string;
+}
+
+export interface FindingUpdate {
+  id?: string;
+  scan_job_id?: string;
+  repo_id?: string;
+  type?: FindingType;
+  severity?: FindingSeverity;
+  status?: FindingStatus;
+  title?: string;
+  description?: string;
+  package_name?: string | null;
+  vulnerable_version?: string | null;
+  patched_version?: string | null;
+  file_path?: string | null;
+  line_number?: number | null;
+  draft_pr_branch?: string | null;
+  draft_pr_body?: string | null;
+  draft_issue_body?: string | null;
+  draft_email_body?: string | null;
+  created_at?: string;
+}
+
 // Minimal Database type for @supabase/supabase-js typed client.
 // Rows mirror the SQL migrations under supabase/migrations/.
-//
-// IMPORTANT: supabase-js v2's GenericTable constraint requires Row, Insert,
-// Update, AND Relationships on every table entry. Omitting Relationships
-// causes the table to fail the GenericSchema structural check silently,
-// which makes .from()/.select() infer `never` instead of raising an error.
-// We have no foreign-key joins wired through the typed client yet, so this
-// is an empty array on every table for now.
 export interface Database {
   public: {
     Tables: {
       repos: {
         Row: Repo;
-        Insert: Partial<Repo> & { full_name: string; html_url: string };
-        Update: Partial<Repo>;
+        Insert: RepoInsert;
+        Update: RepoUpdate;
         Relationships: [];
       };
       scan_jobs: {
         Row: ScanJob;
-        Insert: Partial<ScanJob> & { repo_id: string };
-        Update: Partial<ScanJob>;
+        Insert: ScanJobInsert;
+        Update: ScanJobUpdate;
         Relationships: [];
       };
       findings: {
         Row: Finding;
-        Insert: Partial<Finding> & {
-          scan_job_id: string;
-          repo_id: string;
-          type: FindingType;
-          title: string;
-          description: string;
-        };
-        Update: Partial<Finding>;
+        Insert: FindingInsert;
+        Update: FindingUpdate;
         Relationships: [];
       };
     };
