@@ -68,6 +68,13 @@ export interface Finding {
 
 // Minimal Database type for @supabase/supabase-js typed client.
 // Rows mirror the SQL migrations under supabase/migrations/.
+//
+// IMPORTANT: supabase-js v2's GenericTable constraint requires Row, Insert,
+// Update, AND Relationships on every table entry. Omitting Relationships
+// causes the table to fail the GenericSchema structural check silently,
+// which makes .from()/.select() infer `never` instead of raising an error.
+// We have no foreign-key joins wired through the typed client yet, so this
+// is an empty array on every table for now.
 export interface Database {
   public: {
     Tables: {
@@ -75,11 +82,13 @@ export interface Database {
         Row: Repo;
         Insert: Partial<Repo> & { full_name: string; html_url: string };
         Update: Partial<Repo>;
+        Relationships: [];
       };
       scan_jobs: {
         Row: ScanJob;
         Insert: Partial<ScanJob> & { repo_id: string };
         Update: Partial<ScanJob>;
+        Relationships: [];
       };
       findings: {
         Row: Finding;
@@ -91,7 +100,12 @@ export interface Database {
           description: string;
         };
         Update: Partial<Finding>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }
