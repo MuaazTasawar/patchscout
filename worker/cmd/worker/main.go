@@ -21,8 +21,7 @@ func main() {
 
 	webhookHandler := handlers.NewWebhookHandler(db, cfg.CloneDir, cfg.WorkerCallbackSecret, cfg.NextCallbackURL)
 	mux.Handle("/webhook/scan", webhookHandler)
-
-	// Phase 8 adds /healthz for Render's health check probe.
+	mux.HandleFunc("/healthz", handlers.HealthHandler)
 
 	log.Printf("patchscout-worker listening on :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
