@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/MuaazTasawar/patchscout-worker/internal/models"
 )
@@ -45,8 +46,6 @@ func RunSemgrep(repoPath string) ([]SASTFinding, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
-		// Semgrep exits non-zero when findings exist even without a real
-		// error — only treat it as fatal if we got no JSON output at all.
 		if len(output) == 0 {
 			return nil, fmt.Errorf("semgrep execution failed: %w", err)
 		}
@@ -59,9 +58,22 @@ func RunSemgrep(repoPath string) ([]SASTFinding, error) {
 
 	var findings []SASTFinding
 	for _, r := range parsed.Results {
+		// Semgrep echoes back whatever path form it was given — since we
+		// pass an absolute repoPath as the scan target, r.Path comes back
+		// absolute too (e.g. "D:\...\clones\<job>\insecure.go"), leaking
+		// the local worker's filesystem layout into draft issue text and
+		// making the location useless to anyone looking at the real repo.
+		// Normalize to repo-relative, matching how manifest.go already
+		// handles this for CVE findings' FilePath.
+		relPath, relErr := filepath.Rel(repoPath, r.Path)
+		if relErr != nil {
+			relPath = r.Path // fall back to whatever Semgrep gave us
+		}
+		relPath = filepath.ToSlash(relPath) // normalize backslashes for consistency across OSes
+
 		findings = append(findings, SASTFinding{
 			RuleID:   r.CheckID,
-			FilePath: r.Path,
+			FilePath: relPath,
 			Line:     r.Start.Line,
 			Message:  r.Extra.Message,
 			Severity: mapSemgrepSeverity(r.Extra.Severity),
