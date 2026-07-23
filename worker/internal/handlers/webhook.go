@@ -108,7 +108,7 @@ func (h *WebhookHandler) runScanJob(payload models.WebhookPayload) {
 
 	log.Printf("[job %s] found %d manifest(s) in %s", jobID, len(manifests), clonePath)
 
-	result, detErr := scanner.RunDetection(clonePath, manifests)
+	result, detErr := scanner.RunDetection(jobID, clonePath, manifests)
 	if detErr != nil {
 		h.fail(jobID, "detection failed: "+detErr.Error())
 		return

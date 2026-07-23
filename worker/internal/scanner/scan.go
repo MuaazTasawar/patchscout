@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/MuaazTasawar/patchscout-worker/internal/models"
 )
@@ -22,18 +23,23 @@ type ScanResult struct {
 //
 // Both passes run independently — a failure in one does not block the
 // other, since dependency CVEs and code-pattern bugs are unrelated checks.
-func RunDetection(repoPath string, manifests []models.Manifest) (*ScanResult, error) {
+// Failures ARE logged even though they don't fail the job — a prior
+// version of this function discarded errors silently, which meant a
+// missing/misconfigured Semgrep install produced a "completed" job with
+// zero SAST findings and no visible indication anything had gone wrong.
+func RunDetection(jobID, repoPath string, manifests []models.Manifest) (*ScanResult, error) {
 	result := &ScanResult{Manifests: manifests}
 
 	cveFindings, cveErr := DetectCVEs(manifests)
 	if cveErr != nil {
-		// Log-and-continue: OSV being unreachable shouldn't block SAST.
+		log.Printf("[job %s] OSV/CVE detection failed (continuing with SAST only): %v", jobID, cveErr)
 		cveFindings = nil
 	}
 	result.CVEFindings = cveFindings
 
 	sastFindings, sastErr := RunSemgrep(repoPath)
 	if sastErr != nil {
+		log.Printf("[job %s] Semgrep/SAST detection failed (continuing with CVE only): %v", jobID, sastErr)
 		sastFindings = nil
 	}
 	result.SASTFindings = sastFindings
