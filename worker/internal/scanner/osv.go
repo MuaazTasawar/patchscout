@@ -44,6 +44,15 @@ type osvBatchResponse struct {
 
 // osvVulnDetail is the subset of OSV's full vuln record we care about:
 // the affected ranges (to determine the patched version) and a summary.
+//
+// IMPORTANT: a single advisory can list multiple `affected` packages —
+// e.g. GHSA-w73w-5m7g-f7qc covers BOTH github.com/dgrijalva/jwt-go
+// (unfixed) and its unrelated fork github.com/dgrijalva/jwt-go/v4
+// (fixed at 4.0.0-preview1) under one advisory ID. Package.Name is
+// captured here specifically so extractFixedVersion can scope its
+// search to the entry matching the package actually being queried,
+// rather than grabbing a "Fixed" version that belongs to a different
+// package under the same advisory.
 type osvVulnDetail struct {
 	ID       string `json:"id"`
 	Summary  string `json:"summary"`
@@ -52,6 +61,10 @@ type osvVulnDetail struct {
 		Score string `json:"score"`
 	} `json:"severity"`
 	Affected []struct {
+		Package struct {
+			Name      string `json:"name"`
+			Ecosystem string `json:"ecosystem"`
+		} `json:"package"`
 		Ranges []struct {
 			Type   string `json:"type"`
 			Events []struct {
@@ -68,7 +81,7 @@ type osvVulnDetail struct {
 type CVEFinding struct {
 	PackageName       string
 	VulnerableVersion string
-	PatchedVersion    string // empty if OSV didn't report a fix
+	PatchedVersion    string // empty if OSV didn't report a fix FOR THIS package
 	VulnID            string
 	Summary           string
 	Severity          models.FindingSeverity
@@ -133,15 +146,16 @@ func DetectCVEs(manifests []models.Manifest) ([]CVEFinding, error) {
 		}
 		ref := refs[i]
 
-		// Only fetch full detail for the first vuln ID per package to keep
-		// request volume reasonable in v1; multiple simultaneous CVEs on
-		// the same package/version are rare enough to defer.
 		detail, err := fetchVulnDetail(result.Vulns[0].ID)
 		if err != nil {
 			continue // skip this finding rather than failing the whole scan
 		}
 
-		patched := extractFixedVersion(detail)
+		// Scope the fixed-version lookup to the package actually being
+		// queried — NOT just the first Fixed event anywhere in the
+		// advisory. See the osvVulnDetail doc comment above for why this
+		// matters.
+		patched := extractFixedVersion(detail, ref.pkg.Name)
 		severity := extractSeverity(detail)
 
 		findings = append(findings, CVEFinding{
@@ -176,8 +190,17 @@ func fetchVulnDetail(id string) (*osvVulnDetail, error) {
 	return &detail, nil
 }
 
-func extractFixedVersion(detail *osvVulnDetail) string {
+// extractFixedVersion only considers `affected` entries whose package name
+// matches the package we actually queried for — an advisory can bundle
+// multiple unrelated packages (e.g. a module and its incompatible /v2
+// fork) under one ID, each with its own fix status. Returns "" if the
+// matching package has no recorded fix, which is the correct signal for
+// "don't auto-draft a PR — there's nothing to bump to."
+func extractFixedVersion(detail *osvVulnDetail, packageName string) string {
 	for _, affected := range detail.Affected {
+		if affected.Package.Name != packageName {
+			continue
+		}
 		for _, r := range affected.Ranges {
 			for _, event := range r.Events {
 				if event.Fixed != "" {
@@ -197,10 +220,6 @@ func extractSeverity(detail *osvVulnDetail) models.FindingSeverity {
 		return models.SeverityMedium
 	}
 
-	// CVSS vector strings aren't parsed here (out of scope for v1) — if a
-	// numeric-looking score is present in a "score" field we do a rough
-	// bucket; otherwise default to medium. This is intentionally simple
-	// and safe to revisit later.
 	scoreStr := detail.Severity[0].Score
 	switch {
 	case len(scoreStr) > 0 && scoreStr[0] == '9':
